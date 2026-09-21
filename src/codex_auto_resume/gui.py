@@ -28,6 +28,13 @@ from .state import load_state, save_state, upsert_thread
 
 APP_TITLE = f"Codex Auto Resume v{__version__}  |  作者微信: zxzvsdcj"
 
+# Windows 任务栏 AppUserModelID（必须在创建窗口前设置）
+try:
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CodexAutoResume.App")
+except Exception:
+    pass
+
 
 def load_thread_meta(sessions_root, thread_ids):
     """从 rollout 文件提取每个 thread 的项目名和会话标题（第一条真实用户消息）。"""
@@ -627,13 +634,6 @@ class CodexAutoResumeApp(tk.Tk):
         self.title(APP_TITLE)
         self.minsize("860", "600")
 
-        # Windows 任务栏图标
-        try:
-            import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CodexAutoResume.App")
-        except Exception:
-            pass
-
         self._set_app_icon()
 
         # 读取上次保存的窗口尺寸
@@ -657,6 +657,9 @@ class CodexAutoResumeApp(tk.Tk):
         self.after(500, self._refresh_loop)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # 窗口完全初始化后再设置图标
+        self.after(10, self._set_app_icon)
 
     # ---- 窗口尺寸持久化 ----
     def _window_prefs_path(self):
@@ -712,18 +715,9 @@ class CodexAutoResumeApp(tk.Tk):
             if base is None:
                 base = str(Path(__file__).resolve().parent.parent.parent)
             assets = Path(base) / "assets"
-            # 用 iconphoto 加载多尺寸 png
-            imgs = []
-            for sz in (16, 32, 48, 64, 128, 256):
-                p = assets / f"icon-{sz}.png"
-                if p.exists():
-                    imgs.append(tk.PhotoImage(file=str(p)))
-            if imgs:
-                self.iconphoto(True, *imgs)
-                self._icon_imgs = imgs
-            # 同时设置 ico（任务栏/Alt-Tab）
             ico = assets / "app.ico"
             if ico.exists():
+                # iconbitmap 在 Windows 上最可靠
                 self.iconbitmap(default=str(ico))
         except Exception:
             pass
