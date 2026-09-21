@@ -6,9 +6,9 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
+import json
 import threading
 import time
 import traceback
@@ -325,6 +325,9 @@ class DashboardFrame(ttk.Frame):
         ttk.Button(btn_row2, text="安装开机自启", command=self.app.install_autostart).pack(
             side="left", padx=3
         )
+        ttk.Button(btn_row2, text="保存窗口大小", command=self.app.save_window_size_and_notify).pack(
+            side="left", padx=3
+        )
         ttk.Button(btn_row2, text="移除开机自启", command=self.app.uninstall_autostart).pack(
             side="left", padx=3
         )
@@ -622,10 +625,17 @@ class CodexAutoResumeApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("920x580")
         self.minsize("860", "600")
 
+        # 读取上次保存的窗口尺寸
+        saved = self._load_window_geometry()
+        if saved:
+            self.geometry(saved)
+        else:
+            self.geometry("920x580")
+
         self._setup_styles()
+        self.bind("<Configure>", self._on_window_configure)
 
         self.daemon: EmbeddedDaemon | None = None
         self.daemon_lock = threading.Lock()
@@ -638,6 +648,52 @@ class CodexAutoResumeApp(tk.Tk):
         self.after(500, self._refresh_loop)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    # ---- 窗口尺寸持久化 ----
+    def _window_prefs_path(self):
+        from .config import load_config
+        return load_config().resolved_state_dir() / "gui_window.json"
+
+    def _load_window_geometry(self):
+        try:
+            p = self._window_prefs_path()
+            if p.exists():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                geo = data.get("geometry")
+                if isinstance(geo, str) and "x" in geo:
+                    return geo
+        except Exception:
+            pass
+        return None
+
+    def _save_window_geometry(self):
+        try:
+            p = self._window_prefs_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            geo = self.geometry()
+            # geometry() 返回类似 "920x580+100+100"，只存宽高
+            size_part = geo.split("+")[0]
+            payload = {"geometry": size_part}
+            p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            return size_part
+        except Exception:
+            return None
+
+    def _on_window_configure(self, event):
+        # 只响应主窗口本身的尺寸变化
+        if event.widget is self:
+            w = event.width
+            h = event.height
+            self.title(f"{APP_TITLE} — {w}×{h}")
+
+    def save_window_size_and_notify(self):
+        size = self._save_window_geometry()
+        if size:
+            self._flash_message(f"窗口大小已保存：{size}")
+
+    def _flash_message(self, msg: str):
+        # 在状态栏/标题栏提示；简单起见用 title 闪一下
+        self.title(f"{APP_TITLE} — {msg}")
 
     # ---- 样式 ----
     def _setup_styles(self) -> None:
