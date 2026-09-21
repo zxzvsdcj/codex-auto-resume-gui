@@ -1,5 +1,7 @@
 # Codex Auto Resume
 
+> **致谢**：本项目基于开源仓库 [feifeigong/codex-auto-resume](https://github.com/feifeigong/codex-auto-resume) 进行升级迭代开发，新增了图形界面（GUI）、会话管理增强与界面美化等功能。衷心感谢原作者 [feifeigong](https://github.com/feifeigong) 的出色工作与开源贡献。
+
 Codex Plus 额度用完时，当前对话会停住。这个工具会在额度回来后，**在原来那条对话里自动继续**，不会新开聊天。
 
 Windows 和 macOS 都能用。
