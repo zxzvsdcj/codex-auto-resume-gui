@@ -627,6 +627,15 @@ class CodexAutoResumeApp(tk.Tk):
         self.title(APP_TITLE)
         self.minsize("860", "600")
 
+        # Windows 任务栏图标
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CodexAutoResume.App")
+        except Exception:
+            pass
+
+        self._set_app_icon()
+
         # 读取上次保存的窗口尺寸
         saved = self._load_window_geometry()
         if saved:
@@ -694,6 +703,30 @@ class CodexAutoResumeApp(tk.Tk):
     def _flash_message(self, msg: str):
         # 在状态栏/标题栏提示；简单起见用 title 闪一下
         self.title(f"{APP_TITLE} — {msg}")
+
+    # ---- 应用图标 ----
+    def _set_app_icon(self) -> None:
+        try:
+            import sys
+            base = getattr(sys, "_MEIPASS", None)
+            if base is None:
+                base = str(Path(__file__).resolve().parent.parent.parent)
+            assets = Path(base) / "assets"
+            # 用 iconphoto 加载多尺寸 png
+            imgs = []
+            for sz in (16, 32, 48, 64, 128, 256):
+                p = assets / f"icon-{sz}.png"
+                if p.exists():
+                    imgs.append(tk.PhotoImage(file=str(p)))
+            if imgs:
+                self.iconphoto(True, *imgs)
+                self._icon_imgs = imgs
+            # 同时设置 ico（任务栏/Alt-Tab）
+            ico = assets / "app.ico"
+            if ico.exists():
+                self.iconbitmap(default=str(ico))
+        except Exception:
+            pass
 
     # ---- 样式 ----
     def _setup_styles(self) -> None:
