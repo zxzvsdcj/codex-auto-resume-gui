@@ -26,7 +26,7 @@ from .quota import hint_reset_at, parse_quota_payload
 from .sessions import THREAD_RE, scan_waiting_sessions
 from .state import load_state, save_state, upsert_thread
 
-APP_TITLE = f"Codex Auto Resume v{__version__}"
+APP_TITLE = f"Codex Auto Resume v{__version__}  |  作者微信: zxzvsdcj"
 
 
 def load_thread_meta(sessions_root, thread_ids):
