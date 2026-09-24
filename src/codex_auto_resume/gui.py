@@ -427,7 +427,7 @@ class SessionFrame(ttk.Frame):
         super().__init__(master, padding=16)
         self.app = app
 
-        columns = ("thread", "project", "title", "status", "enabled", "resumes", "error")
+        columns = ("project", "title", "status", "enabled", "resumes", "error", "thread")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", height=12)
         self.tree.heading("thread", text="Thread ID")
         self.tree.heading("project", text="项目")
@@ -463,7 +463,7 @@ class SessionFrame(ttk.Frame):
         if state is None:
             return
         meta = snap.get("thread_meta") or {}
-        current = {self.tree.item(iid, "values")[0]: iid for iid in self.tree.get_children()}
+        current = {self.tree.item(iid, "values")[-1]: iid for iid in self.tree.get_children()}
         seen = set()
         for thread_id, task in state.threads.items():
             seen.add(thread_id)
@@ -471,7 +471,7 @@ class SessionFrame(ttk.Frame):
             project = m.get("project", "")
             title = m.get("title", "")
             error = (task.last_error or "").replace("\n", " ")[:60]
-            values = (thread_id, project, title, task.status, "是" if task.enabled else "否", task.resumes, error)
+            values = (project, title, task.status, "是" if task.enabled else "否", task.resumes, error, thread_id)
             if thread_id in current:
                 self.tree.item(current[thread_id], values=values)
             else:
@@ -481,7 +481,7 @@ class SessionFrame(ttk.Frame):
                 self.tree.delete(iid)
 
     def _selected(self) -> list[str]:
-        return [self.tree.item(iid, "values")[0] for iid in self.tree.selection()]
+        return [self.tree.item(iid, "values")[-1] for iid in self.tree.selection()]
 
     def _set_enabled(self, enabled: bool) -> None:
         selected = self._selected()
