@@ -13,3 +13,8 @@ logs/
 
 # 本地文档，不提交
 docs/
+
+# 构建产物
+dist/
+build/
+*.spec
