@@ -26,7 +26,7 @@ from .quota import hint_reset_at, parse_quota_payload
 from .sessions import THREAD_RE, scan_waiting_sessions
 from .state import load_state, save_state, upsert_thread
 
-APP_TITLE = f"Codex Auto Resume v{__version__}  |  作者微信: zxzvsdcj"
+APP_TITLE = f"Codex Auto Resume v{__version__}  |  作者微信: zxzvsdcj — 额度恢复后，在原来的对话里自动续跑"
 
 # Windows 任务栏 AppUserModelID（必须在创建窗口前设置）
 try:
@@ -802,12 +802,6 @@ class CodexAutoResumeApp(tk.Tk):
 
     # ---- UI 构建 ----
     def _build_ui(self) -> None:
-        header = ttk.Frame(self, padding=(16, 12, 16, 4))
-        header.pack(fill="x")
-        ttk.Label(header, text="额度恢复后，在原来的对话里自动续跑", foreground="#888888").pack(
-            side="left", padx=16
-        )
-
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=12, pady=(4, 12))
 
