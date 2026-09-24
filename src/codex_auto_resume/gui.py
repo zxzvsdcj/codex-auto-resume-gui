@@ -804,9 +804,6 @@ class CodexAutoResumeApp(tk.Tk):
     def _build_ui(self) -> None:
         header = ttk.Frame(self, padding=(16, 12, 16, 4))
         header.pack(fill="x")
-        ttk.Label(
-            header, text=APP_TITLE, font=("Microsoft YaHei UI", 14, "bold")
-        ).pack(side="left")
         ttk.Label(header, text="额度恢复后，在原来的对话里自动续跑", foreground="#888888").pack(
             side="left", padx=16
         )
