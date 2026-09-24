@@ -7,11 +7,11 @@ from dataclasses import asdict
 from .app_server import AppServerClient, fetch_live_rate_limits
 from .config import AppConfig
 from .paths import resolve_codex_command, sessions_dir
-from .quota import QuotaSnapshot, hint_reset_at, parse_quota_payload, quota_recovered
+from .quota import QuotaSnapshot, hint_reset_at, parse_quota_payload, quota_available, quota_recovered
 from .redeem import try_redeem_weekly_reset
 from .procutil import claim_watch_pid, process_running, release_watch_pid
 from .resume import spawn_resume
-from .sessions import WaitingSession, latest_quota_from_rollouts, scan_waiting_sessions
+from .sessions import WaitingSession, scan_waiting_sessions
 from .state import AppState, load_state, save_state, upsert_thread
 
 
@@ -57,7 +57,14 @@ def tick(
             if snapshot
             else (False, "quota-unknown")
         )
-        if snapshot:
+        if snapshot and snapshot.source != "app-server":
+            recovered = False
+            reason = "quota-unconfirmed"
+        elif snapshot and snapshot.source == "app-server":
+            live_ok, _live_reason = quota_available(snapshot, cfg.ready_used_percent, now)
+            if not live_ok:
+                state.last_live_blocked_at = now
+        if snapshot and snapshot.source == "app-server":
             state.last_quota = asdict(snapshot)
             state.last_quota["primary"] = asdict(snapshot.primary) if snapshot.primary else None
             state.last_quota["secondary"] = asdict(snapshot.secondary) if snapshot.secondary else None
@@ -110,6 +117,9 @@ def tick(
                 task.status = "resume-failed"
                 continue
             if task.handled_mark == match.mark:
+                task.status = "already-handled"
+                continue
+            if recovered and not _cycle_open(task, state):
                 task.status = "already-handled"
                 continue
             if not recovered:
@@ -168,10 +178,7 @@ class LiveQuota:
         except Exception as exc:
             self.close()
             _log(self.cfg, f"app-server quota failed: {exc}")
-        return latest_quota_from_rollouts(
-            sessions_dir(self.cfg.resolved_codex_home()),
-            since=now - self.cfg.lookback_hours * 3600,
-        )
+        return None
 
     def try_redeem(
         self,
@@ -221,10 +228,14 @@ def read_quota(cfg: AppConfig, now: float) -> QuotaSnapshot | None:
             return parsed
     except Exception as exc:
         _log(cfg, f"app-server quota failed: {exc}")
-    return latest_quota_from_rollouts(
-        sessions_dir(cfg.resolved_codex_home()),
-        since=now - cfg.lookback_hours * 3600,
-    )
+    return None
+
+
+def _cycle_open(task, state: AppState) -> bool:
+    """同一轮实时限额只续一次。新的一轮要先看到实时额度再次用尽。"""
+    if not task.last_resume_at:
+        return True
+    return state.last_live_blocked_at > task.last_resume_at
 
 
 def _resume_one(

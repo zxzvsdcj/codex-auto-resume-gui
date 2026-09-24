@@ -37,6 +37,7 @@ class AppState:
     last_reset_credit_at: float = 0.0
     last_reset_credit_id: str = ""
     last_reset_credit_note: str = ""
+    last_live_blocked_at: float = 0.0
 
 
 def state_path(state_dir: Path) -> Path:
@@ -55,16 +56,25 @@ def load_state(state_dir: Path) -> AppState:
         value = {**value, "thread_id": value.get("thread_id") or key}
         allowed = {k: value[k] for k in ThreadState.__dataclass_fields__ if k in value}
         threads[key] = ThreadState(**allowed)
+    status = str(raw.get("last_status") or "idle")
+    checked_at = float(raw.get("last_checked_at") or 0)
+    if "last_live_blocked_at" in raw:
+        blocked_at = float(raw.get("last_live_blocked_at") or 0)
+    elif status.startswith(("reached", "window", "spend", "ordinary")):
+        blocked_at = checked_at
+    else:
+        blocked_at = 0.0
     return AppState(
         version=int(raw.get("version") or 1),
         threads=threads,
-        last_status=str(raw.get("last_status") or "idle"),
+        last_status=status,
         last_quota_source=str(raw.get("last_quota_source") or ""),
-        last_checked_at=float(raw.get("last_checked_at") or 0),
+        last_checked_at=checked_at,
         last_quota=raw.get("last_quota") if isinstance(raw.get("last_quota"), dict) else {},
         last_reset_credit_at=float(raw.get("last_reset_credit_at") or 0),
         last_reset_credit_id=str(raw.get("last_reset_credit_id") or ""),
         last_reset_credit_note=str(raw.get("last_reset_credit_note") or ""),
+        last_live_blocked_at=blocked_at,
     )
 
 
@@ -80,6 +90,7 @@ def save_state(state_dir: Path, state: AppState) -> Path:
         "last_reset_credit_at": state.last_reset_credit_at,
         "last_reset_credit_id": state.last_reset_credit_id,
         "last_reset_credit_note": state.last_reset_credit_note,
+        "last_live_blocked_at": state.last_live_blocked_at,
         "threads": {key: asdict(value) for key, value in state.threads.items()},
     }
     tmp = path.with_suffix(".json.tmp")

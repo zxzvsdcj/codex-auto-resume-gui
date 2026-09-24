@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from codex_auto_resume.config import AppConfig, DEFAULT_PROMPT, LEGACY_PROMPT, load_config
 from codex_auto_resume.daemon import LiveQuota, tick
-from codex_auto_resume.quota import parse_quota_payload, should_redeem_weekly_reset
+from codex_auto_resume.quota import QuotaSnapshot, QuotaWindow, parse_quota_payload, should_redeem_weekly_reset
 from codex_auto_resume.redeem import try_redeem_weekly_reset
 from codex_auto_resume.sessions import WaitingSession
 from codex_auto_resume.state import AppState, upsert_thread
@@ -392,10 +392,24 @@ class ResumeCapTests(unittest.TestCase):
             self.assertEqual(state.threads[THREAD].resumes, 1)
 
             scan.return_value = [_waiting("mark-2")]
+            with patch("codex_auto_resume.daemon.spawn_resume") as spawn:
+                state = tick(cfg, state=state, quota_reader=reader)
+            spawn.assert_not_called()
+            self.assertEqual(state.threads[THREAD].resumes, 1)
+            self.assertEqual(state.threads[THREAD].status, "already-handled")
+
+            client.primary_used = 100
+            with patch("codex_auto_resume.daemon.spawn_resume") as spawn:
+                state = tick(cfg, state=state, quota_reader=reader)
+            spawn.assert_not_called()
+            self.assertGreater(state.last_live_blocked_at, state.threads[THREAD].last_resume_at)
+
+            client.primary_used = 0
+            scan.return_value = [_waiting("mark-3")]
             with patch("codex_auto_resume.daemon.spawn_resume", return_value=(101, "queue")) as spawn:
                 state = tick(cfg, state=state, quota_reader=reader)
             spawn.assert_called_once()
-            self.assertEqual(state.threads[THREAD].handled_mark, "mark-2")
+            self.assertEqual(state.threads[THREAD].handled_mark, "mark-3")
             self.assertEqual(state.threads[THREAD].resumes, 2)
             self.assertEqual(state.threads[THREAD].status, "resumed")
 
@@ -455,6 +469,64 @@ class ResumeCapTests(unittest.TestCase):
             spawn.assert_called_once()
             self.assertEqual(state.threads[THREAD].status, "resumed")
             self.assertEqual(state.threads[THREAD].handled_mark, "mark-2")
+
+    @patch("codex_auto_resume.daemon.process_running", return_value=False)
+    @patch("codex_auto_resume.daemon.scan_waiting_sessions")
+    def test_stale_rollout_available_does_not_resume(self, scan, _running) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            cfg = _cfg(root)
+            scan.return_value = [_waiting("mark-stale")]
+            stale = QuotaSnapshot(
+                primary=QuotaWindow(used_percent=0, resets_at=9_999_999_999, window_minutes=300),
+                secondary=QuotaWindow(used_percent=17, resets_at=9_999_999_999, window_minutes=10080),
+                source="rollout",
+                fetched_at=1,
+            )
+
+            class _Fixed:
+                client = None
+
+                def read(self, now):
+                    return stale
+
+                def try_redeem(self, snapshot, state, now):
+                    return snapshot, ""
+
+                def close(self) -> None:
+                    return None
+
+            with patch("codex_auto_resume.daemon.spawn_resume") as spawn:
+                state = tick(cfg, quota_reader=_Fixed())
+            spawn.assert_not_called()
+            self.assertEqual(state.last_status, "quota-unconfirmed")
+            self.assertEqual(state.threads[THREAD].resumes, 0)
+
+    @patch("codex_auto_resume.daemon.process_running", return_value=False)
+    @patch("codex_auto_resume.daemon.scan_waiting_sessions")
+    def test_live_read_failure_does_not_resume(self, scan, _running) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            cfg = _cfg(root)
+            scan.return_value = [_waiting("mark-unknown")]
+
+            class _Down:
+                client = None
+
+                def read(self, now):
+                    return None
+
+                def try_redeem(self, snapshot, state, now):
+                    return snapshot, ""
+
+                def close(self) -> None:
+                    return None
+
+            with patch("codex_auto_resume.daemon.spawn_resume") as spawn:
+                state = tick(cfg, quota_reader=_Down())
+            spawn.assert_not_called()
+            self.assertEqual(state.last_status, "quota-unknown")
+            self.assertEqual(state.threads[THREAD].resumes, 0)
 
 
 if __name__ == "__main__":

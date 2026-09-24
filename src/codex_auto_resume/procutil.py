@@ -60,12 +60,18 @@ def process_running(pid: int | None) -> bool:
         return False
     if sys.platform == "win32":
         process_query_limited = 0x1000
-        kernel32 = ctypes.windll.kernel32
+        still_active = 259
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         handle = kernel32.OpenProcess(process_query_limited, False, int(pid))
         if handle:
+            code = ctypes.c_ulong()
+            alive = True
+            if kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                alive = code.value == still_active
             kernel32.CloseHandle(handle)
-            return True
-        return kernel32.GetLastError() == 5
+            return alive
+        # 5 = 没有权限打开进程，只能当成还在跑，避免误判后重复启动。
+        return ctypes.get_last_error() == 5
     try:
         os.kill(pid, 0)
     except OSError:
